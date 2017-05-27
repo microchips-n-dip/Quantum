@@ -17,15 +17,16 @@ typedef typename uEigen::Matrix<std::complex<double>> umc_t;
 typedef typename uEigen::Vector<double> uv_t;
 typedef typename uEigen::Matrix<double> um_t;
 
-typedef int Root;
+typedef typename uEigen::Vector<int> Root;
 template <typename T> using GroupSpace = uEigen::Vector<T>;
 typedef typename uEigen::Matrix<int> CartanMatrix;
+
+GroupSpace<int> basisVector(int dim, int n);
 
 class RootSystem
 {
   private:
 	// Private variables
-	GroupSpace<Root> Epsilon;
 	GroupSpace<Root> Alpha;
 	GroupSpace<Root> upperRoots;
 	GroupSpace<Root> lowerRoots;
