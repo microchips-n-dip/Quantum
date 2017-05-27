@@ -25,6 +25,7 @@ class RootSystem
 {
   private:
 	// Private variables
+	GroupSpace<Root> Epsilon;
 	GroupSpace<Root> Alpha;
 	GroupSpace<Root> upperRoots;
 	GroupSpace<Root> lowerRoots;
