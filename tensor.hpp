@@ -306,8 +306,6 @@ class Tensor : public TensorBase<_DerivedType>
 			temp += metricTensors[index]({args[index], i}) * _data[this->getRawLocation(omit_args)];
 		}
 		
-		printf("Flipped index %d, got %f\n", index, temp);    // You need to tell your code how to format this!
-		
 		_data[this->getRawLocation(args)] = temp;
 	}
 	
