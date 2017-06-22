@@ -12,6 +12,7 @@ template <typename _DerivedType>
 class TensorBase
 {
   protected:
+	// Protected member variables
 	typedef _DerivedType Scalar;
   
 	size_t TensorRank;
@@ -27,8 +28,11 @@ class TensorBase
 	size_t* IndexMultipliers;
 	Scalar* rawDataIndexComplete;
 	
+	// Protected member functions
+	// Prototype for index transformation tensors
 	virtual void TransformIndices() = 0;
 	
+	// Take a 1-dimensional location as an input and output an n-dimensional set of indices
 	std::vector<unsigned int> getNDIndices(unsigned int rawLocation)
 	{
 		std::vector<unsigned int> NDI = std::vector<unsigned int>(TensorRank);
@@ -44,6 +48,7 @@ class TensorBase
 		return NDI;
 	}
 	
+	// Get the 1-dimensional location from an n-dimensional set of indices
 	unsigned int getRawLocation(std::initializer_list<unsigned int> args)
 	{
 		unsigned int* localStride = IndexMultipliers;
@@ -75,11 +80,13 @@ class TensorBase
 	}
 	
   public:
+	// Unconfigured constructor
 	TensorBase()
 	{
 		isUnconfigured = true;
 	}
   
+	// Function to set the indices letters
 	void setIndices(std::string _Indices)
 	{
 		strcpy(LastTempIndexForms, TempIndexForms);
@@ -136,6 +143,7 @@ class TensorBase
 		;
 	}*/
 	
+	// Operator to make interacting with individual elements more natural
 	Scalar& operator()(std::initializer_list<unsigned int> args)
 	{
 		return rawDataIndexComplete[getRawLocation(args)];
@@ -146,10 +154,13 @@ class TensorBase
 		return rawDataIndexComplete[getRawLocation(args)];
 	}
 	
-	template <typename TensorType, typename ProductOpScalar>
-	friend TensorType ProductOp(const TensorType& A, const TensorType& B);
+	// Friend functions
+	template <typename TensorType, typename TensorTypeLHS, typename TensorTypeRHS, \
+		typename ProductOpScalar, typename ProductOpScalarLHS, typename ProductOpScalarRHS>
+	friend TensorType ProductOp(const TensorTypeLHS& A, const TensorTypeRHS& B);
 };
 
+// Derived class for member functions
 template <typename _DerivedType>
 class MetricTensor : public TensorBase<_DerivedType>
 {
@@ -159,6 +170,7 @@ class MetricTensor : public TensorBase<_DerivedType>
 	void TransformIndices() {;}
 	
   public:
+	// Constructor
 	MetricTensor(std::initializer_list<unsigned int> args)
 	{
 		this->isUnconfigured = false;
@@ -229,11 +241,13 @@ class MetricTensor : public TensorBase<_DerivedType>
 		}
 	}
 	
+	// Unconfigured constructor
 	MetricTensor()
 	{
 		this->isUnconfigured = true;
 	}
   
+	// Destructor (lots of segfaults apparently)
 	~MetricTensor()
 	{
 		if (this->isUnconfigured == false)
@@ -253,14 +267,17 @@ class MetricTensor : public TensorBase<_DerivedType>
 	}
 };
 
+// General derived tensor class
 template <typename _DerivedType>
 class Tensor : public TensorBase<_DerivedType>
 {
   protected:
 	typedef _DerivedType Scalar;
   
+	// Array of metric tensors used for transformations
 	MetricTensor<Scalar>* metricTensors;
   
+	// Function for transforming all the indices
 	void TransformIndices()
 	{
 		size_t fullSize = this->fullRawArraySize;
@@ -277,6 +294,7 @@ class Tensor : public TensorBase<_DerivedType>
 		delete[] temp;
 	}
 	
+	// Function to transform a single index
 	void FlipSingleIndex(unsigned int index, std::vector<unsigned int> args, Scalar*& _data)
 	{
 		std::vector<unsigned int> omit_args = args;
@@ -307,6 +325,7 @@ class Tensor : public TensorBase<_DerivedType>
 		this->rawDataIndexComplete[this->getRawLocation(args)] = temp;
 	}
 	
+	// Function to fetch a value with a single index transformed
 	Scalar fetchWithIndexTransform(unsigned int index, std::vector<unsigned int> args)
 	{
 		Scalar temp = 0;
@@ -336,6 +355,7 @@ class Tensor : public TensorBase<_DerivedType>
 	}
 	
   public:
+	// Constructor
 	Tensor(std::initializer_list<unsigned int> args)
 	{
 		this->isUnconfigured = false;
@@ -410,6 +430,7 @@ class Tensor : public TensorBase<_DerivedType>
 		}
 	}
   
+	// Destructor (lots of segfaults, apparently)
 	~Tensor()
 	{
 		if (this->isUnconfigured == false)
@@ -429,22 +450,25 @@ class Tensor : public TensorBase<_DerivedType>
 			printf("Tensor unconfigured, nothing to do on destruction\n");
 	}
   
+	// Helper function for setting all of the index metric tensors
 	void setGlobalIndexMetric(const MetricTensor<Scalar>& _transformer)
 	{
 		for (unsigned int i = 0; i < this->TensorRank; i++)
 			metricTensors[i] = _transformer;
 	}
 
+	// Helper function for setting a single specific metric tensor
 	void setLocalIndexMetric(const MetricTensor<Scalar>& _transformer, size_t specificIndex)
 	{
 		metricTensors[specificIndex] = _transformer;
 	}
 };
 
-template <typename Scalar>
+// Helper function for doing a single contracted tensor product
+template <typename Scalar, typename ScalarLHS, typename ScalarRHS>
 void ProductSingleIndex(unsigned int index1, unsigned int index2,
 	std::vector<unsigned int> args1, std::vector<unsigned int> args2,
-	TensorBase<Scalar>& _data1, TensorBase<Scalar>& _data2, Scalar* _dataC)
+	TensorBase<ScalarLHS>& _data1, TensorBase<ScalarRHS>& _data2, Scalar* _dataC)
 {
 	std::vector<unsigned int> omit_args1 = args1;
 	std::vector<unsigned int> omit_args2 = args2;
@@ -462,11 +486,13 @@ void ProductSingleIndex(unsigned int index1, unsigned int index2,
 	*_dataC = temp;
 }
 
-template <typename TensorType, typename ProductOpScalar>
-TensorType ProductOp(const TensorType& A, const TensorType& B)
+// Function for doing tensor products
+template <typename TensorType, typename TensorTypeLHS, typename TensorTypeRHS, \
+	typename ProductOpScalar, typename ProductOpScalarLHS, typename ProductOpScalarRHS>
+TensorType ProductOp(const TensorTypeLHS& A, const TensorTypeRHS& B)
 {
-	TensorType tempA = A;
-	TensorType tempB = B;
+	TensorTypeLHS tempA = A;
+	TensorTypeRHS tempB = B;
 	
 	std::vector<unsigned int> Cinit;
 	
@@ -486,19 +512,33 @@ TensorType ProductOp(const TensorType& A, const TensorType& B)
 	
 	for (unsigned int k = 0; k < A.TensorRank; k++)
 	for (unsigned int l = 0; l < B.TensorRank; l++)
+	for (unsigned int m = 0; m < C.fullRawArraySize; m++)
 	for (unsigned int i = 0; i < A.fullRawArraySize; i++)
 	for (unsigned int j = 0; j < B.fullRawArraySize; j++)
-	for (unsigned int m = 0; m < C.fullRawArraySize; m++)
 	if (A.Indices[k] == B.Indices[l])
-		ProductSingleIndex<ProductOpScalar>(k, l, tempA.getNDIndices(i), tempB.getNDIndices(j), tempA, tempB, &C(C.getNDIndices(m)));
+		ProductSingleIndex<ProductOpScalar, ProductOpScalarLHS, ProductOpScalarRHS> \
+			(k, l, tempA.getNDIndices(i), tempB.getNDIndices(j), tempA, tempB, &C(C.getNDIndices(m)));
 	else
 		C(C.getNDIndices(m)) = tempA(tempA.getNDIndices(i)) * tempB(tempB.getNDIndices(j));
 	
 	return C;
 }
 
+// Operators for making interaction with the tensors more natural
 Tensor<double> operator*(const Tensor<double>& A, const Tensor<double>& B)
-{ return ProductOp<Tensor<double>, double>(A, B); }
+{ return ProductOp<Tensor<double>, Tensor<double>, Tensor<double>, double, double, double>(A, B); }
+
+Tensor<std::complex<double>> operator*(const Tensor<std::complex<double>>& A, const Tensor<double>& B)
+{ return ProductOp<Tensor<std::complex<double>>, Tensor<std::complex<double>>, Tensor<double>, \
+	std::complex<double>, std::complex<double>, double>(A, B); }
+
+Tensor<std::complex<double>> operator*(const Tensor<double>& A, const Tensor<std::complex<double>>& B)
+{ return ProductOp<Tensor<std::complex<double>>, Tensor<double>, Tensor<std::complex<double>>, \
+	std::complex<double>, double, std::complex<double>>(A, B); }
+
+Tensor<std::complex<double>> operator*(const Tensor<std::complex<double>>& A, const Tensor<std::complex<double>>& B)
+{ return ProductOp<Tensor<std::complex<double>>, Tensor<std::complex<double>>, Tensor<std::complex<double>>, \
+	std::complex<double>, std::complex<double>, std::complex<double>>(A, B); }
 
 #define __TENSOR_HH
 #endif
