@@ -51,8 +51,8 @@ class TensorBase
 	// Get the 1-dimensional location from an n-dimensional set of indices
 	unsigned int getRawLocation(std::initializer_list<unsigned int> args)
 	{
-		unsigned int* localStride = IndexMultipliers;
-		unsigned int* localDims = IndexSizes;
+		unsigned int* localStride = (unsigned int*)IndexMultipliers;
+		unsigned int* localDims = (unsigned int*)IndexSizes;
 		unsigned int ind = 0;
 	
 		std::initializer_list<unsigned int>::iterator li;
@@ -66,8 +66,8 @@ class TensorBase
 	
 	unsigned int getRawLocation(std::vector<unsigned int> args)
 	{
-		unsigned int* localStride = IndexMultipliers;
-		unsigned int* localDims = IndexSizes;
+		unsigned int* localStride = (unsigned int*)IndexMultipliers;
+		unsigned int* localDims = (unsigned int*)IndexSizes;
 		unsigned int ind = 0;
 	
 		std::vector<unsigned int>::iterator li;
