@@ -8,6 +8,7 @@
 #include <string>
 #include <complex>
 
+// Tensor base class
 template <typename _DerivedType>
 class TensorBase
 {
@@ -492,21 +493,62 @@ TensorType ProductOp(const TensorTypeLHS& A, const TensorTypeRHS& B)
 	TensorTypeLHS tempA = A;
 	TensorTypeRHS tempB = B;
 	
-	std::vector<unsigned int> Cinit;
+	std::vector<unsigned int> Cinit = std::vector<unsigned int>(tempA.TensorRank + tempB.TensorRank);
+	std::vector<char> CIndexForms = std::vector<char>(tempA.TensorRank + tempB.TensorRank);
+	std::vector<char> CIndices = std::vector<char>(tempA.TensorRank + tempB.TensorRank);
+	
+	std::vector<unsigned int> flagForEraseA;
+	std::vector<unsigned int> flagForEraseB;
 	
 	for (unsigned int i = 0; i < tempA.TensorRank; i++)
-	for (unsigned int j = i + 1; j < tempB.TensorRank; j++)
+	{
+		Cinit[i] = tempA.IndexSizes[i];
+		CIndexForms[i] = tempA.TempIndexForms[i];
+		CIndices[i] = tempA.Indices[i];
+	}
+	
+	for (unsigned int i = 0; i < tempB.TensorRank; i++)
+	{
+		Cinit[i + tempA.TensorRank] = tempB.IndexSizes[i];
+		CIndexForms[i + tempA.TensorRank] = tempB.TempIndexForms[i];
+		CIndices[i + tempA.TensorRank] = tempB.Indices[i];
+	}
+	
+	for (unsigned int i = 0; i < tempA.TensorRank; i++)
+	for (unsigned int j = 0; j < tempB.TensorRank; j++)
 	if (tempA.Indices[i] == tempB.Indices[j])
 	{
-		Cinit.erase(Cinit.begin() + i);
-		Cinit.erase(Cinit.begin() + tempA.TensorRank + j);
+		flagForEraseA.push_back(i);
+		flagForEraseB.push_back(j);
+		
 		j = tempB.TensorRank;
+	}
+	
+	for (std::vector<unsigned int>::iterator it = flagForEraseB.end() - 1; it >= flagForEraseB.begin(); it--)
+	{
+		Cinit.erase(Cinit.begin() + tempA.TensorRank + *it);
+		CIndexForms.erase(CIndexForms.begin() + tempA.TensorRank + *it);
+		CIndices.erase(CIndices.begin() + tempA.TensorRank + *it);
+	}
+	
+	for (std::vector<unsigned int>::iterator it = flagForEraseA.end() - 1; it >= flagForEraseA.begin(); it--)
+	{
+		Cinit.erase(Cinit.begin() + *it);
+		CIndexForms.erase(CIndexForms.begin() + *it);
+		CIndices.erase(CIndices.begin() + *it);
 	}
 	
 	unsigned int Crank = Cinit.size();
 	Cinit.insert(Cinit.begin(), Crank);
 	
 	TensorType C = TensorType(Cinit);
+	
+	for (unsigned int i = 0; i < Crank; i++)
+	{
+		C.TempIndexForms[i] = CIndexForms[i];
+		C.LastTempIndexForms[i] = CIndexForms[i];
+		C.Indices[i] = CIndices[i];
+	}
 	
 	for (unsigned int k = 0; k < A.TensorRank; k++)
 	for (unsigned int l = 0; l < B.TensorRank; l++)
