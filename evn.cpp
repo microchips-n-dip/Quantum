@@ -14,6 +14,7 @@
 static const double pi = acos(-1.0);
 static const double npi = sqrt(0.5 * pi);
 
+// Some functions to make random variables a little more random in the interest of proper evolution
 static const unsigned int urand_seed = 697;
 static const unsigned int n_urand_steps = 16;
 
@@ -34,12 +35,16 @@ double urand_bound(double a, double b)
 	return ((double)(urand()) / RAND_MAX) * b + a;
 }
 
+// The number of symbols to use for i/o
 static const unsigned int n_subvals = 5;
 
+// Acts as a sort of augmented neuron, is represented by a bunch of vectors rather than having single values attributed
 struct Nodeon
 {
+	// Sets m_activation's elements to the sigmoid of the associated m_inp elements
 	void lf(double t)
 	{
+		// Print some values for debugging
 		printf("%p\n", &m_inp);
 		printf("%p\n", m_inp.data()); // This fails on second nodeon of evn
 		for (unsigned int i = 0; i < n_subvals; ++i) {
@@ -52,21 +57,27 @@ struct Nodeon
 		}
 	}
 	
+	// Function letting different child structs do their thing
 	void do_something(unsigned int c) { }
 	
 	Nodeon() { }
 	
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	
+	// Input vector
 	Eigen::Tensor<double, 1> m_inp = Eigen::Tensor<double, 1>(n_subvals); // This tensor in the second nodeon of evn has address 0x0
+	// Activation vector
 	Eigen::Tensor<double, 1> m_activation = Eigen::Tensor<double, 1>(n_subvals);
+	// Last logged "firing" time of each associated element of m_activation
 	Eigen::Tensor<double, 1> m_llft = Eigen::Tensor<double, 1>(n_subvals);
 	
+	// Bool indicating whether this is allowed to be removed by mutations
 	static const bool removable = true;
 };
 
 struct InputNodeon : public Nodeon
 {
+	// Input values from a file into the nodeon
 	void do_something(unsigned int c)
 	{
 		unsigned int i;
@@ -89,11 +100,13 @@ struct InputNodeon : public Nodeon
 	
 	FILE** m_input_file;
 	
+	// Bool indicating whether this is allowed to be removed by mutations
 	static const bool removable = false;
 };
 
 struct OutputNodeon : public Nodeon
 {
+	// Output to a file
 	void do_something(unsigned int c)
 	{
 		fprintf(*m_output_file, "%d\n", c);
@@ -110,28 +123,36 @@ struct OutputNodeon : public Nodeon
 	
 	FILE** m_output_file;
 	
+	// Bool indicating whether this is allowed to be removed by mutations
 	static const bool removable = false;
 };
 
+// Values for the connectons
 static const double w_A_plus = 0.1;
 static const double w_A_minus = 0.15;
 static const double w_T_plus = 0.02;
 static const double w_T_minus = 0.11;
 static const double m_c_tau = 0.2;
 
+// Matrix form of a synapse using RL-STDP for plastic learning
 struct Connecton
 {
+	// Transmit values from source nodeon to dest nodeon
 	void tm()
 	{
+		// All this culminates in a matrix product
 		std::array<Eigen::IndexPair<int>, 1> ctr1 = {Eigen::IndexPair<int>(1, 0)};
-		(*m_dst).m_inp += tco((*m_src).m_activation, m_weight, ctr1);
+		m_dst->m_inp += tco(m_src->m_activation, m_weight, ctr1); // tco = Tensor Contraction Operation (from Eigen)
 	}
 	
+	// STDP
 	void stdp(double dop)
 	{
+		// Tensor addition op to subtract the two last logged firing times
 		std::array<Eigen::IndexPair<int>, 0> ctr1 = {};
-		Eigen::Tensor<double, 2> dt = tao(m_dst->m_llft, -m_src->m_llft, ctr1);
+		Eigen::Tensor<double, 2> dt = tao(m_dst->m_llft, -m_src->m_llft, ctr1); // tao = Tensor Addition Operation (from Eigen)
 		
+		// Compute the eligibility
 		for (unsigned int i = 0; i < m_eligibility.size(); ++i) {
 			if (m_llft_dst.coeffRef(i / m_eligibility.dimensions()[1]) != m_dst->m_llft.coeffRef(i / m_eligibility.dimensions()[1])) {
 				if (dt.coeffRef(i) >= 0)
@@ -141,7 +162,9 @@ struct Connecton
 			}
 		}
 		
+		// Finish up the eligibility
 		m_eligibility -= m_eligibility / m_c_tau;
+		// Modify the weight
 		m_weight += m_eligibility * dop;
 	}
 	
@@ -152,53 +175,54 @@ struct Connecton
 		m_src = src;
 		m_dst = dst;
 		
-		m_weight = Eigen::Tensor<double, 2>(n_subvals, n_subvals);
-		m_eligibility = Eigen::Tensor<double, 2>(n_subvals, n_subvals);
+		// Initialize the weight matrix with random values
 		for (unsigned int i = 0; i < m_weight.size(); ++i)
 			m_weight.coeffRef(i) = urand_bound(-1.0, 1.0);
-		m_llft_dst = Eigen::Tensor<double, 1>(n_subvals);
 	}
 	
+	// Source nodeon
 	Nodeon* m_src;
+	// Dest nodeon
 	Nodeon* m_dst;
-	Eigen::Tensor<double, 1> m_llft_dst;
+	// Dest's last logged firing time
+	Eigen::Tensor<double, 1> m_llft_dst = Eigen::Tensor<double, 1>(n_subvals);
 	
-	Eigen::Tensor<double, 2> m_weight;
-	Eigen::Tensor<double, 2> m_eligibility;
+	// Weight matrix
+	Eigen::Tensor<double, 2> m_weight = Eigen::Tensor<double, 2>(n_subvals, n_subvals);
+	// Eligibility matrix
+	Eigen::Tensor<double, 2> m_eligibility = Eigen::Tensor<double, 2>(n_subvals, n_subvals);
 };
 
+// Mutation probabilities
 static const double mutaprob_plus_nodeon = 0.2;
 static const double mutaprob_plus_connecton = 0.4;
 static const double mutaprob_minus_nodeon = 0.05;
 static const double mutaprob_minus_connecton = 0.1;
 
+// Some values to let the network do its thing
 static const unsigned int n_samples = 1;
 static const unsigned int EvNumAllowedCycles = 64;
 static const unsigned int NetNumAllowedCycles = 10;
 
 struct EvolutionaryNetwork
 {
+	// Run the network for <time> iterations
 	void net_run(double time)
 	{
-		printf("Starting net_run function\n");
 		double s_time = m_network_time;
 		for (m_network_time; m_network_time < s_time + time; m_network_time += 0.1) {
 			for (unsigned int i = 0; i < m_nodeons.size(); ++i) {
-				printf("Starting nodeon simulation\n");
 				m_nodeons.at(i)->lf(m_network_time);
-				printf("Nodeon lf\n");
 			}
 			for (unsigned int i = 0; i < m_connectons.size(); ++i) {
 				m_connectons.at(i)->tm();
-				printf("Connecton tm\n");
 			}
 		}
-		printf("Ending net_run function\n");
 	}
 	
+	// Network cost function
 	double net_cost()
 	{
-		printf("Starting net_cost function\n");
 		double misaligned = 0;
 		for (unsigned int i = 0; i < n_samples; ++i) {
 			*m_output_file = fopen(m_fname, "w+");
@@ -225,18 +249,19 @@ struct EvolutionaryNetwork
 			system(cmd);
 		}
 		
-		printf("Ending net_cost function\n");
 		return misaligned;
 	}
 	
+	// Network fitness function
 	double net_fitness()
 	{
 		double c_cost = net_cost();
 		double ret = c_cost / m_last_cost - 1;
-		m_last_cost = c_cost;
+		m_net_last_cost = c_cost;
 		return ret;
 	}
 	
+	// Run some evolution steps (basically a way of including stdp)
 	void ev_run(unsigned int cycles)
 	{
 		FILE* ofile = *m_output_file;
@@ -250,10 +275,9 @@ struct EvolutionaryNetwork
 		net_run(NetNumAllowedCycles);
 	}
 	
+	// Evolutionary stage cost function
 	double ev_cost()
 	{
-		printf("Starting ev_cost function\n");
-		
 		double misaligned = 0;
 		for (unsigned int i = 0; i < n_samples; ++i) {
 			*m_output_file = fopen(m_fname, "w+");
@@ -280,25 +304,28 @@ struct EvolutionaryNetwork
 			system(cmd);
 		}
 		
-		printf("Ending ev_cost function\n");
 		return misaligned;
 	}
 	
+	// Evolutionary stage fitness function
 	double ev_fitness()
 	{
 		double c_cost = ev_cost();
 		double ret = c_cost / m_last_cost - 1;
-		m_last_cost = c_cost;
+		m_ev_last_cost = c_cost;
 		return ret;
 	}
 	
+	// Add a nodeon
 	void add_nodeon()
 	{
 		m_nodeons.push_back(new Nodeon());
 	}
 	
+	// Remove a nodeon
 	void remove_nodeon(unsigned int nodeon_id)
 	{
+		// Only do this if we're allowed to remove the nodeon
 		if (m_nodeons.at(nodeon_id)->removable) {
 			for (unsigned int i = 0; i < m_connectons.size(); ++i) {
 				if (m_connectons.at(i)->m_src == m_nodeons.at(nodeon_id) || \
@@ -313,32 +340,39 @@ struct EvolutionaryNetwork
 		}
 	}
 	
+	// Add a connecton
 	void add_connecton(unsigned int nodeon_1, unsigned int nodeon_2)
 	{
 		m_connectons.push_back(new Connecton(m_nodeons.at(nodeon_1), m_nodeons.at(nodeon_2)));
 	}
 	
+	// Remove a connecton
 	void remove_connecton(unsigned int connecton_id)
 	{
 		m_connectons.at(connecton_id) = *m_connectons.end();
 		m_connectons.pop_back();
 	}
 	
+	// Mutate function
 	void mutate()
 	{
 		double val;
 		
+		// Randomly add a random nodeon
 		val = urand_bound(0.0, 1.0);
 		if (val > mutaprob_plus_nodeon)
 			add_nodeon();
+		// Randomly remove a random nodeon
 		val = urand_bound(0.0, 1.0);
 		if (val > mutaprob_minus_nodeon)
 			remove_nodeon(urand_bound(0.0, m_nodeons.size() - 1));
 		
+		// Randomly add a random connecton
 		val = urand_bound(0.0, 1.0);
 		if (val > mutaprob_plus_connecton)
 			add_connecton(urand_bound(0.0, m_nodeons.size() - 1), \
 										urand_bound(0.0, m_nodeons.size() - 1));
+		// Randomly remove a random connecton
 		val = urand_bound(0.0, 1.0);
 		if (val > mutaprob_minus_connecton)
 			remove_connecton(urand_bound(0.0, m_connectons.size() - 1));
@@ -348,26 +382,35 @@ struct EvolutionaryNetwork
 		m_ev_number(ev_number)
 	{
 		m_fname = (std::to_string(m_ev_number) + ".txt").c_str();
+		// Add input and output nodeons right away
 		m_nodeons.push_back(new InputNodeon(m_input_file));
 		m_nodeons.push_back(new OutputNodeon(m_output_file));
 		
+		// Mutate some times to get started
 		mutate();
 		mutate();
 		mutate();
 	}
 	
+	// Nodeon array
 	std::vector<Nodeon*> m_nodeons;
+	// Connecton array
 	std::vector<Connecton*> m_connectons;
 
+	// Internal file name
 	const char* m_fname;
+	// Files
 	FILE** m_input_file;
 	FILE** m_output_file;
 
-	double m_last_cost = std::numeric_limits<double>::infinity();
+	// For stdp and fitness functions
+	double m_net_last_cost = std::numeric_limits<double>::infinity();
+	double m_ev_last_cost = std::numeric_limits<double>::infinity();
 	double m_network_time = 0;
 	unsigned int m_ev_number;
 };
 
+// Sort based on known fitnesses
 template <typename Derived, typename Dimensions>
 Derived quick_sort(Derived& a, Dimensions& c)
 {
@@ -409,6 +452,7 @@ Derived quick_sort(Derived& a, Dimensions& c)
 	return full;
 }
 
+// Sort and get fitnesses
 template <typename Derived>
 Derived sort(Derived& a)
 {
