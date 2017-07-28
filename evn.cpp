@@ -57,20 +57,27 @@ struct Nodeon
 		}
 	}
 	
+	void common_tensor_initialization()
+	{
+		m_inp = Eigen::Tensor<double, 1>(n_subvals);
+		m_activation = Eigen::Tensor<double, 1>(n_subvals);
+		m_llft = Eigen::Tensor<double, 1>(n_subvals);
+	}
+	
 	// Function letting different child structs do their thing
 	void do_something(unsigned int c) { }
 	
-	Nodeon() { }
+	Nodeon() { common_tensor_initialization(); }
 	~Nodeon() { printf("Nodeon::~Nodeon()\n"); }
 	
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	
 	// Input vector
-	Eigen::Tensor<double, 1> m_inp = Eigen::Tensor<double, 1>(n_subvals); // This tensor in the second nodeon of evn has address 0x0
+	Eigen::Tensor<double, 1> m_inp; // This tensor in the second nodeon of evn has address 0x0
 	// Activation vector
-	Eigen::Tensor<double, 1> m_activation = Eigen::Tensor<double, 1>(n_subvals);
+	Eigen::Tensor<double, 1> m_activation;
 	// Last logged "firing" time of each associated element of m_activation
-	Eigen::Tensor<double, 1> m_llft = Eigen::Tensor<double, 1>(n_subvals);
+	Eigen::Tensor<double, 1> m_llft;
 	
 	// Bool indicating whether this is allowed to be removed by mutations
 	static const bool removable = true;
@@ -90,12 +97,13 @@ struct InputNodeon : public Nodeon
 		}
 	}
 	
-	InputNodeon() { }
+	InputNodeon() { common_tensor_initialization(); }
 	
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	
 	InputNodeon(FILE** input_file)
 	{
+		common_tensor_initialization();
 		m_input_file = input_file;
 	}
 	
@@ -113,12 +121,13 @@ struct OutputNodeon : public Nodeon
 		fprintf(*m_output_file, "%d\n", c);
 	}
 	
-	OutputNodeon() { }
+	OutputNodeon() { common_tensor_initialization(); }
 	
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	
 	OutputNodeon(FILE** output_file)
 	{
+		common_tensor_initialization();
 		m_output_file = output_file;
 	}
 	
@@ -257,7 +266,7 @@ struct EvolutionaryNetwork
 	double net_fitness()
 	{
 		double c_cost = net_cost();
-		double ret = c_cost / m_last_cost - 1;
+		double ret = c_cost / m_net_last_cost - 1;
 		m_net_last_cost = c_cost;
 		return ret;
 	}
@@ -312,7 +321,7 @@ struct EvolutionaryNetwork
 	double ev_fitness()
 	{
 		double c_cost = ev_cost();
-		double ret = c_cost / m_last_cost - 1;
+		double ret = c_cost / m_ev_last_cost - 1;
 		m_ev_last_cost = c_cost;
 		return ret;
 	}
