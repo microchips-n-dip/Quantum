@@ -61,6 +61,7 @@ struct Nodeon
 	void do_something(unsigned int c) { }
 	
 	Nodeon() { }
+	~Nodeon() { printf("Nodeon::~Nodeon()\n"); }
 	
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	
